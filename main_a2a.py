@@ -210,10 +210,10 @@ async def dashboard():
 @app.get("/xai", response_class=HTMLResponse)
 async def xai_dashboard():
     """Serve the XAI Dashboard."""
-    dashboard_path = Path("outputs/xai/xai_dashboard.html")
+    dashboard_path = Path(__file__).parent / "xai_dashboard.html"
     if dashboard_path.exists():
         return HTMLResponse(dashboard_path.read_text(encoding="utf-8"))
-    return HTMLResponse("<h1>XAI Dashboard not found — check outputs/xai/xai_dashboard.html</h1>")
+    return HTMLResponse("<h1>XAI Dashboard not found — check if xai_dashboard.html is placed next to main_a2a.py</h1>")
 
 
 @app.get("/latest_xai")

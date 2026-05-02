@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>XAI Dashboard | Elmazraa Waste Intelligence</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Outfit:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #10b981;
+            --primary-dark: #059669;
+            --bg: #0f172a;
+            --card-bg: #1e293b;
+            --text: #f8fafc;
+            --text-muted: #94a3b8;
+            --accent: #3b82f6;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+            padding: 2rem;
+        }
+
+        h1, h2, h3 {
+            font-family: 'Outfit', sans-serif;
+            font-weight: 700;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 3rem;
+            background: linear-gradient(135deg, var(--card-bg) 0%, #1e293b 100%);
+            padding: 2rem;
+            border-radius: 1.5rem;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            background: linear-gradient(to right, #10b981, #3b82f6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        .card {
+            background: var(--card-bg);
+            padding: 2rem;
+            border-radius: 1.5rem;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2);
+            border-color: rgba(16, 185, 129, 0.3);
+        }
+
+        .card-title {
+            font-size: 1.5rem;
+            margin-bottom: 1.5rem;
+            color: var(--primary);
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        /* Chain of Thought Styles */
+        .cot-item {
+            position: relative;
+            padding-left: 2rem;
+            margin-bottom: 2rem;
+            border-left: 2px solid var(--accent);
+        }
+
+        .cot-item::before {
+            content: '';
+            position: absolute;
+            left: -9px;
+            top: 0;
+            width: 16px;
+            height: 16px;
+            background: var(--accent);
+            border-radius: 50%;
+            box-shadow: 0 0 10px var(--accent);
+        }
+
+        .cot-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 0.5rem;
+        }
+
+        .cot-step {
+            font-weight: 600;
+            color: var(--accent);
+        }
+
+        .cot-tool {
+            font-family: monospace;
+            background: rgba(59, 130, 246, 0.2);
+            padding: 0.2rem 0.5rem;
+            border-radius: 0.4rem;
+            font-size: 0.9rem;
+        }
+
+        .cot-reasoning {
+            font-size: 1rem;
+            background: rgba(255, 255, 255, 0.03);
+            padding: 1rem;
+            border-radius: 0.75rem;
+            margin-top: 0.5rem;
+        }
+
+        .cot-meta {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-top: 0.5rem;
+            display: flex;
+            gap: 1rem;
+        }
+
+        /* Attribution Styles */
+        .indicator-list {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .indicator-item {
+            background: rgba(255, 255, 255, 0.02);
+            padding: 1rem;
+            border-radius: 1rem;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .indicator-name {
+            font-weight: 600;
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 0.5rem;
+        }
+
+        .progress-bg {
+            height: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(to right, var(--primary), #34d399);
+            border-radius: 4px;
+        }
+
+        .causal-link {
+            margin-top: 1.5rem;
+            padding: 1rem;
+            background: rgba(16, 185, 129, 0.05);
+            border-radius: 1rem;
+            border-left: 4px solid var(--primary);
+        }
+
+        .causal-header {
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--primary);
+            margin-bottom: 0.5rem;
+            font-weight: 700;
+        }
+
+        .tag {
+            font-size: 0.75rem;
+            padding: 0.2rem 0.6rem;
+            border-radius: 1rem;
+            font-weight: 600;
+        }
+
+        .tag-high { background: rgba(16, 185, 129, 0.2); color: #10b981; }
+        .tag-med { background: rgba(245, 158, 11, 0.2); color: #f59e0b; }
+        .tag-low { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
+
+        .dashboard-tabs {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .tab-btn {
+            padding: 0.75rem 1.5rem;
+            background: var(--card-bg);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: var(--text-muted);
+            border-radius: 0.75rem;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+
+        .tab-btn.active {
+            background: var(--primary);
+            color: white;
+            border-color: var(--primary);
+            box-shadow: 0 4px 14px rgba(16, 185, 129, 0.4);
+        }
+
+        .chart-container {
+            height: 300px;
+            margin-top: 2rem;
+        }
+
+        .glass {
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .animate {
+            animation: fadeIn 0.6s ease forwards;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header class="header animate">
+            <div>
+                <h1>Aritificial Intelligence Explainability (XAI)</h1>
+                <p style="color: var(--text-muted); margin-top: 0.5rem;">Plateforme d'interprétation des décisions - Elmazraa Waste Intelligence</p>
+            </div>
+            <div style="text-align: right;">
+                <div id="session-id-badge" style="font-family: monospace; background: var(--bg); padding: 0.5rem 1rem; border-radius: 0.5rem; border: 1px solid rgba(255, 255, 255, 0.1);">
+                    SESSION: #<span id="session-id">LOADING...</span>
+                </div>
+                <p id="timestamp" style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.5rem;"></p>
+            </div>
+        </header>
+
+        <div class="dashboard-tabs animate" style="animation-delay: 0.1s;">
+            <button class="tab-btn active" onclick="switchTab('cot')">Chain of Thought</button>
+            <button class="tab-btn" onclick="switchTab('attribution')">Indicator Attribution</button>
+            <button class="tab-btn" onclick="window.location.reload()">Rafraîchir les Données</button>
+        </div>
+
+        <div id="cot-section" class="tab-content animate" style="animation-delay: 0.2s;">
+            <div class="grid">
+                <div class="card">
+                    <h3 class="card-title">Trace de Raisonnement Interne</h3>
+                    <div id="cot-trace-container">
+                        <!-- CoT items will be injected here -->
+                        <p style="color: var(--text-muted);">Aucune donnée de session détectée. Veuillez lancer une analyse.</p>
+                    </div>
+                </div>
+                <div class="card">
+                    <h3 class="card-title">Analyse de la Confiance</h3>
+                    <div class="chart-container">
+                        <canvas id="confidenceChart"></canvas>
+                    </div>
+                    <div style="margin-top: 2rem;">
+                        <h4 style="margin-bottom: 1rem;">Métriques Clés</h4>
+                        <div id="metrics-container" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                            <!-- Metrics injected here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="attribution-section" class="tab-content animate" style="display: none; animation-delay: 0.2s;">
+            <div class="grid">
+                <div class="card">
+                    <h3 class="card-title">Attribution des Indicateurs Visuels</h3>
+                    <div id="indicator-attribution-container" class="indicator-list">
+                        <!-- Indicators injected here -->
+                    </div>
+                </div>
+                <div class="card">
+                    <h3 class="card-title">Graphe d'Influence Décisionnelle</h3>
+                    <div class="chart-container">
+                        <canvas id="attributionChart"></canvas>
+                    </div>
+                    <div id="causal-links-container" style="margin-top: 2rem;">
+                        <!-- Causal links injected here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Data will be injected here by the server
+        let xaiData = {
+            session_id: "N/A",
+            timestamp: new Date().toLocaleString(),
+            cot_trace: [],
+            attribution: {
+                indicators: [],
+                risk_drivers: [],
+                valo_drivers: [],
+                roi_drivers: []
+            }
+        };
+
+        async function loadXaiData() {
+            try {
+                // Try to load from the latest session result
+                const response = await fetch('/latest_xai');
+                if (response.ok) {
+                    const data = await response.json();
+                    xaiData = data;
+                    renderDashboard();
+                }
+            } catch (e) {
+                console.error("Failed to load XAI data", e);
+            }
+        }
+
+        function switchTab(tab) {
+            document.querySelectorAll('.tab-content').forEach(el => el.style.display = 'none');
+            document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+            
+            document.getElementById(tab + '-section').style.display = 'block';
+            event.target.classList.add('active');
+        }
+
+        function renderDashboard() {
+            document.getElementById('session-id').textContent = xaiData.session_id;
+            document.getElementById('timestamp').textContent = xaiData.timestamp;
+
+            // Render CoT Trace
+            const cotContainer = document.getElementById('cot-trace-container');
+            if (xaiData.cot_trace && xaiData.cot_trace.length > 0) {
+                cotContainer.innerHTML = xaiData.cot_trace.map(item => `
+                    <div class="cot-item">
+                        <div class="cot-header">
+                            <span class="cot-step">Étape ${item.iter}</span>
+                            <span class="cot-tool">${item.tool}</span>
+                        </div>
+                        <div class="cot-reasoning">${item.reasoning}</div>
+                        <div class="cot-meta">
+                            <span><strong style="color: var(--primary)">Confidence:</strong> ${(item.confidence * 100).toFixed(0)}%</span>
+                            <span><strong style="color: var(--accent)">Heure:</strong> ${item.timestamp || 'N/A'}</span>
+                        </div>
+                    </div>
+                `).join('');
+
+                renderConfidenceChart();
+                renderMetrics();
+            }
+
+            // Render Indicators
+            const indicatorContainer = document.getElementById('indicator-attribution-container');
+            if (xaiData.attribution && xaiData.attribution.indicators && xaiData.attribution.indicators.length > 0) {
+                indicatorContainer.innerHTML = xaiData.attribution.indicators.map(ind => `
+                    <div class="indicator-item">
+                        <div class="indicator-name">
+                            <span>${ind.name}</span>
+                            <span class="tag ${ind.score > 0.8 ? 'tag-high' : 'tag-med'}">${(ind.score * 100).toFixed(0)}% Match</span>
+                        </div>
+                        <div class="progress-bg">
+                            <div class="progress-fill" style="width: ${ind.score * 100}%"></div>
+                        </div>
+                        <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.5rem;">${ind.evidence}</p>
+                    </div>
+                `).join('');
+
+                renderCausalLinks();
+                renderAttributionChart();
+            }
+        }
+
+        function renderConfidenceChart() {
+            const ctx = document.getElementById('confidenceChart').getContext('2d');
+            const labels = xaiData.cot_trace.map(item => `Step ${item.iter}`);
+            const data = xaiData.cot_trace.map(item => item.confidence);
+
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Indice de Certitude LLM',
+                        data: data,
+                        borderColor: '#10b981',
+                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                        borderWidth: 3,
+                        fill: true,
+                        tension: 0.4,
+                        pointBackgroundColor: '#10b981',
+                        pointRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: { beginAtZero: true, max: 1, grid: { color: 'rgba(255,255,255,0.05)' } },
+                        x: { grid: { display: false } }
+                    },
+                    plugins: { legend: { display: false } }
+                }
+            });
+        }
+
+        function renderAttributionChart() {
+            const ctx = document.getElementById('attributionChart').getContext('2d');
+            const indicators = xaiData.attribution.indicators;
+            const labels = indicators.map(i => i.name);
+            const data = indicators.map(i => i.score);
+
+            new Chart(ctx, {
+                type: 'radar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Poids de l\'Indicateur',
+                        data: data,
+                        backgroundColor: 'rgba(59, 130, 246, 0.2)',
+                        borderColor: '#3b82f6',
+                        pointBackgroundColor: '#3b82f6',
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        r: {
+                            beginAtZero: true,
+                            max: 1,
+                            ticks: { display: false },
+                            grid: { color: 'rgba(255,255,255,0.1)' },
+                            angleLines: { color: 'rgba(255,255,255,0.1)' }
+                        }
+                    },
+                    plugins: { legend: { display: false } }
+                }
+            });
+        }
+
+        function renderMetrics() {
+            const container = document.getElementById('metrics-container');
+            const avgConf = xaiData.cot_trace.reduce((acc, curr) => acc + curr.confidence, 0) / xaiData.cot_trace.length;
+            const maxConf = Math.max(...xaiData.cot_trace.map(i => i.confidence));
+            
+            container.innerHTML = `
+                <div style="background: rgba(255,255,255,0.03); padding: 1rem; border-radius: 1rem; text-align: center;">
+                    <div style="font-size: 0.8rem; color: var(--text-muted);">Moyenne Confiance</div>
+                    <div style="font-size: 1.5rem; font-weight: 700; color: var(--primary);">${(avgConf * 100).toFixed(1)}%</div>
+                </div>
+                <div style="background: rgba(255,255,255,0.03); padding: 1rem; border-radius: 1rem; text-align: center;">
+                    <div style="font-size: 0.8rem; color: var(--text-muted);">Pic de Certitude</div>
+                    <div style="font-size: 1.5rem; font-weight: 700; color: var(--accent);">${(maxConf * 100).toFixed(1)}%</div>
+                </div>
+            `;
+        }
+
+        function renderCausalLinks() {
+            const container = document.getElementById('causal-links-container');
+            let html = '<h4 style="margin-bottom: 1rem;">Justification Causale Dynamique</h4>';
+            
+            if (xaiData.attribution.risk_drivers.length > 0) {
+                html += `
+                    <div class="causal-link">
+                        <div class="causal-header">Impact Risque (Pathogènes)</div>
+                        ${xaiData.attribution.risk_drivers.map(d => `<p>→ <strong>${d.indicator}</strong>: ${d.impact}</p>`).join('')}
+                    </div>
+                `;
+            }
+            
+            if (xaiData.attribution.valo_drivers.length > 0) {
+                html += `
+                    <div class="causal-link" style="border-left-color: var(--accent);">
+                        <div class="causal-header" style="color: var(--accent);">Impact Valorisation</div>
+                        ${xaiData.attribution.valo_drivers.map(d => `<p>→ <strong>${d.indicator}</strong>: ${d.impact}</p>`).join('')}
+                    </div>
+                `;
+            }
+
+            container.innerHTML = html;
+        }
+
+        // Initialize
+        loadXaiData();
+        // Fallback if direct injection is used
+        window.addEventListener('message', event => {
+            if (event.data && event.data.type === 'xai_data') {
+                xaiData = event.data.data;
+                renderDashboard();
+            }
+        });
+    </script>
+</body>
+</html>
