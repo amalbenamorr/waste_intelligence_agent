@@ -1,10 +1,8 @@
 # ============================================================
-# state.py — AgentState v13
+# state.py — AgentState v14
 #
-# FIXES vs v12:
-# 1. Added _direct_report_injected flag for Bug 1 fix in master_agent
-#    → allows should_stop to inject a direct report into state and halt
-#    the graph immediately without the empty tool call overwriting it
+# FIXES vs v13:
+# 1. Added xai_cot_trace and xai_attribution for XAI dashboard.
 # ============================================================
 
 from typing import TypedDict, Optional, List, Any
@@ -37,6 +35,7 @@ class AgentState(TypedDict, total=False):
     risk_assessment:    Optional[str]
     valorization_plan:  Optional[str]
     roi_result:         Optional[str]
+    environmental_impact: Optional[str]
 
     # ── Long-term memory ─────────────────────────────────────
     past_similar: Optional[Any]
@@ -61,6 +60,10 @@ class AgentState(TypedDict, total=False):
     # and injects it into state, bypassing the empty tool call result.
     # agent_node checks this flag and returns immediately if True.
     _direct_report_injected: Optional[bool]
+
+    # ── v14: XAI (Explainable AI) trace ──────────────────────
+    xai_cot_trace:   List[dict]
+    xai_attribution: dict
 
     # ── LangGraph messages ───────────────────────────────────
     messages: List[Any]

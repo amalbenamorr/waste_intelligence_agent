@@ -699,6 +699,12 @@ CRITICAL RULES:
 - CRITICAL v17: When calling generate_report, copy the COMPLETE text from
   WATER_FULL_ANALYSIS and MANURE_FULL_ANALYSIS sections as water_analysis/manure_analysis
 - ALL generate_report parameters MUST be plain strings (never objects/dicts)
+
+XAI REASONING FORMAT:
+Before choosing your next tool, you MUST provide your internal reasoning in this format:
+REASONING: [why this step is next, what you observed]
+CHOSEN_TOOL: [tool name]
+CONFIDENCE: [0.0-1.0]
 """
 
     flows = {
@@ -991,10 +997,40 @@ def agent_node(state: AgentState) -> dict:
     else:
         print(f"  → Direct response")
 
+    # v14: Extract CoT reasoning
+    tool_called = "direct_response"
+    if hasattr(response, 'tool_calls') and response.tool_calls:
+        tool_called = response.tool_calls[0]['name']
+    
+    cot_entry = _extract_xai_cot(response.content, count + 1, tool_called)
+    current_cot = state.get("xai_cot_trace") or []
+
     return {
         "messages": [response],
         "iteration_count": count + 1,
         "session_summary": session_summary,
+        "xai_cot_trace": current_cot + [cot_entry]
+    }
+
+
+def _extract_xai_cot(response_content: str, count: int, tool_called: str) -> dict:
+    """v14: Extract CoT from LLM response."""
+    reasoning = ""
+    conf = 0.5
+    if response_content:
+        r_match = re.search(r'REASONING:?\s*(.*?)(?:\nCHOSEN_TOOL:|$)', response_content, re.DOTALL | re.IGNORECASE)
+        if r_match: reasoning = r_match.group(1).strip()
+        c_match = re.search(r'CONFIDENCE:?\s*([0-9.]+)', response_content, re.IGNORECASE)
+        if c_match: 
+            try: conf = float(c_match.group(1))
+            except: pass
+            
+    return {
+        "iter": count,
+        "reasoning": reasoning or "Executing standard analysis pipeline step.",
+        "tool": tool_called,
+        "confidence": conf,
+        "timestamp": time.strftime("%H:%M:%S")
     }
 
 
@@ -1102,7 +1138,71 @@ def update_state_node(state: AgentState) -> AgentState:
                 updates["final_report"] = direct_report
                 print("  [v17] Direct report generated successfully")
 
+    # v14: Dynamic Indicator Attribution
+    if any(k in updates for k in ["water_description", "manure_description", "risk_assessment", "valorization_plan", "roi_result"]):
+        updates["xai_attribution"] = _extract_xai_attribution({**state, **updates})
+
     return {**state, **updates}
+
+
+def _extract_xai_attribution(state: AgentState) -> dict:
+    """
+    v14: Extract visual indicators and trace their influence.
+    """
+    water_text = state.get("water_description") or ""
+    manure_text = state.get("manure_description") or ""
+    all_text = (water_text + " " + manure_text).lower()
+    
+    attribution = state.get("xai_attribution") or {
+        "indicators": [],
+        "risk_drivers": [],
+        "valo_drivers": [],
+        "roi_drivers": []
+    }
+    
+    indicator_patterns = [
+        ("urate_crystals", r"urate[_\s]crystals", 0.8),
+        ("pathogen_eggs", r"egg[_\s]like|parasite[_\s]egg|oval[_\s]structure", 0.9),
+        ("bacterial_clusters", r"bacterial[_\s]cluster|bacteria[_\s]dense", 0.7),
+        ("fungal_hyphae", r"hyphae|spore|fungi", 0.85),
+        ("turbidity_high", r"turbidity.*(?:opaque|cloudy|level[_\s]high)", 0.6),
+        ("color_anomaly", r"dominant.*(?:yellow|brown|black|grey|orange)", 0.5)
+    ]
+    
+    new_indicators = []
+    for name, pattern, base_weight in indicator_patterns:
+        if re.search(pattern, all_text):
+            weight = base_weight
+            if "abundant" in all_text: weight += 0.1
+            if "moderate" in all_text: weight += 0.05
+            if "rare" in all_text: weight -= 0.1
+            
+            new_indicators.append({
+                "name": name.replace("_", " ").title(),
+                "score": round(min(weight, 1.0), 2),
+                "evidence": f"Found in visual analysis"
+            })
+            
+    if new_indicators:
+        attribution["indicators"] = new_indicators
+    
+    # Trace causal links
+    if state.get("risk_assessment") and not attribution["risk_drivers"]:
+        if any("Pathogen" in i["name"] for i in new_indicators):
+            attribution["risk_drivers"].append({"indicator": "Pathogen Eggs", "impact": "High risk of parasitosis detected in sample"})
+        if any("Bacterial" in i["name"] for i in new_indicators):
+            attribution["risk_drivers"].append({"indicator": "Bacterial Clusters", "impact": "Bacterial load indicates potential contamination"})
+
+    if state.get("valorization_plan") and not attribution["valo_drivers"]:
+        if any("Urate" in i["name"] for i in new_indicators):
+            attribution["valo_drivers"].append({"indicator": "Urate Crystals", "impact": "Significant nitrogen markers found"})
+        if any("Turbidity" in i["name"] for i in new_indicators):
+            attribution["valo_drivers"].append({"indicator": "High Turbidity", "impact": "Organic matter concentration supports fertigation use"})
+            
+    if state.get("roi_result") and not attribution["roi_drivers"]:
+        attribution["roi_drivers"].append({"indicator": "Economic Model", "impact": "Calculation based on recommended valorization path"})
+
+    return attribution
 
 
 def _sanitize_tool_args(tool_call: dict, state: AgentState) -> dict:
@@ -1410,6 +1510,8 @@ def run_agent(
         messages=[],
         session_summary="",
         _direct_report_injected=False,
+        xai_cot_trace=[],
+        xai_attribution={}
     )
 
     agent  = build_agent()

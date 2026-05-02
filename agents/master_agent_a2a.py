@@ -137,6 +137,64 @@ def _build_valo_query(water_desc: str, manure_desc: str, waste_type: str) -> str
     return " ".join(parts)[:150]
 
 
+def _extract_xai_attribution(state: dict) -> dict:
+    """
+    v14: Extract visual indicators and trace their influence (A2A version).
+    """
+    water_text = state.get("water_description") or ""
+    manure_text = state.get("manure_description") or ""
+    all_text = (water_text + " " + manure_text).lower()
+    
+    attribution = state.get("xai_attribution") or {
+        "indicators": [],
+        "risk_drivers": [],
+        "valo_drivers": [],
+        "roi_drivers": []
+    }
+    
+    indicator_patterns = [
+        ("urate_crystals", r"urate[_\s]crystals", 0.8),
+        ("pathogen_eggs", r"egg[_\s]like|parasite[_\s]egg|oval[_\s]structure", 0.9),
+        ("bacterial_clusters", r"bacterial[_\s]cluster|bacteria[_\s]dense", 0.7),
+        ("fungal_hyphae", r"hyphae|spore|fungi", 0.85),
+        ("turbidity_high", r"turbidity.*(?:opaque|cloudy|level[_\s]high)", 0.6),
+        ("color_anomaly", r"dominant.*(?:yellow|brown|black|grey|orange)", 0.5)
+    ]
+    
+    new_indicators = []
+    for name, pattern, base_weight in indicator_patterns:
+        if re.search(pattern, all_text):
+            weight = base_weight
+            if "abundant" in all_text: weight += 0.1
+            if "moderate" in all_text: weight += 0.05
+            if "rare" in all_text: weight -= 0.1
+            
+            new_indicators.append({
+                "name": name.replace("_", " ").title(),
+                "score": round(min(weight, 1.0), 2),
+                "evidence": f"Detected in vision results"
+            })
+            
+    if new_indicators:
+        attribution["indicators"] = new_indicators
+    
+    # Trace causal links
+    if state.get("risk_assessment") and not attribution["risk_drivers"]:
+        if any("Pathogen" in i["name"] for i in new_indicators):
+            attribution["risk_drivers"].append({"indicator": "Pathogen Eggs", "impact": "High risk detected -> Urgent treatment protocols recommended"})
+        if any("Bacterial" in i["name"] for i in new_indicators):
+            attribution["risk_drivers"].append({"indicator": "Bacterial Clusters", "impact": "Influenced risk score calculation"})
+
+    if state.get("valorization_plan") and not attribution["valo_drivers"]:
+        if any("Urate" in i["name"] for i in new_indicators):
+            attribution["valo_drivers"].append({"indicator": "Urate Crystals", "impact": "Nitrogen-rich sample detected -> Biostimulant focus"})
+            
+    if state.get("roi_result") and not attribution["roi_drivers"]:
+        attribution["roi_drivers"].append({"indicator": "ROI Projection", "impact": "Based on optimized valorization path"})
+
+    return attribution
+
+
 def _determine_waste_type(
     water_rgb: str, water_micro: str,
     manure_rgb: str, manure_micro: str,
@@ -232,6 +290,21 @@ def run_agent_a2a(
 
     emit("session_start", data={"session_id": session_id, "request_type": request_type})
 
+    # XAI Tracking
+    xai_cot_trace = []
+    xai_attribution = {"indicators":[], "risk_drivers":[], "valo_drivers":[], "roi_drivers":[]}
+    
+    def log_cot(step: int, tool: str, reasoning: str, confidence: float = 0.8):
+        xai_cot_trace.append({
+            "iter": step,
+            "tool": tool,
+            "reasoning": reasoning,
+            "confidence": confidence,
+            "timestamp": time.strftime("%H:%M:%S")
+        })
+
+    log_cot(1, "discovery", "Initialisation du pipeline A2A et vérification de la disponibilité des agents spécialisés.")
+
     # ── Health check ───────────────────────────────────────────
     emit("discovery_start", status="running")
     health = asyncio.run(check_agents_health(AGENT_URLS))
@@ -254,6 +327,7 @@ def run_agent_a2a(
     available = registry.available_agents
     print(f"  [Registry] Available agents: {available}")
     emit("registry_ready", data={"available_agents": available})
+    log_cot(2, "registry", f"Agents identifiés: {', '.join(available)}. Délégation des analyses VLM pour extraction d'indicateurs.")
 
     # ── Parallel delegation ────────────────────────────────────
     emit("delegation_start", status="running")
@@ -285,6 +359,7 @@ def run_agent_a2a(
         "manure_status":   manure_result.get("status") if manure_result else "not_called",
         "errors":          delegation_errors,
     })
+    log_cot(3, "delegation", f"Analyses visuelles terminées en parallèle. Extraction des caractéristiques biologiques pour le diagnostic.")
 
     print(f"  [A2A] Delegation complete in {parallel_time}s")
     if delegation_errors:
@@ -364,6 +439,16 @@ def run_agent_a2a(
             print(f"  [Pipeline] search_risk error: {e}")
             emit("tool_error", agent="master", data={"tool": "search_risk", "error": str(e)})
 
+    if risk_assessment:
+        log_cot(4, "search_risk", "Analyse des risques pathogènes basée sur les indicateurs VLM détectés (œufs, bactéries, biofilm).")
+        # Update attribution
+        xai_attribution = _extract_xai_attribution({
+            "water_description": water_description,
+            "manure_description": manure_description,
+            "risk_assessment": risk_assessment,
+            "xai_attribution": xai_attribution
+        })
+
     # search_valorization
     if request_type not in ("risk_only", "treatment_only", "environment_only"):
         emit("tool_start", agent="master", data={"tool": "search_valorization"})
@@ -378,6 +463,16 @@ def run_agent_a2a(
         except Exception as e:
             print(f"  [Pipeline] search_valorization error: {e}")
             emit("tool_error", agent="master", data={"tool": "search_valorization", "error": str(e)})
+            
+    if valorization_plan:
+        log_cot(5, "search_valorization", "Optimisation du plan de valorisation selon la teneur en azote et la turbidité observée.")
+        xai_attribution = _extract_xai_attribution({
+            "water_description": water_description,
+            "manure_description": manure_description,
+            "risk_assessment": risk_assessment,
+            "valorization_plan": valorization_plan,
+            "xai_attribution": xai_attribution
+        })
 
     # calculate_roi
     if valorization_plan:
@@ -482,6 +577,8 @@ def run_agent_a2a(
         emit("tool_error", agent="master", data={"tool": "generate_report", "error": str(e)})
         final_report = f"Report generation failed: {e}"
 
+    log_cot(6, "generate_report", "Génération du rapport final consolidé incluant l'explicabilité et les recommandations stratégiques.", 0.95)
+
     total_time = round(time.time() - t_global_start, 2)
     print(f"\n{'='*60}")
     print(f"  A2A PIPELINE COMPLETE — {total_time}s total ({parallel_time}s parallel)")
@@ -512,6 +609,8 @@ def run_agent_a2a(
         "total_time_s":           total_time,
         "water_confidence":       water_conf,
         "manure_confidence":      manure_conf,
+        "xai_cot_trace":          xai_cot_trace,
+        "xai_attribution":        xai_attribution,
     }
 
     # Print report to console

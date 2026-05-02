@@ -45,12 +45,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount("/outputs", StaticFiles(directory="outputs"), name="outputs")
 app.include_router(voice_router)
 
 # ── In-memory event store for SSE ─────────────────────────────
 # Maps session_id → queue of events
 _event_queues: dict[str, queue.Queue] = {}
 _session_results: dict[str, dict] = {}
+_xai_store: dict[str, dict] = {}
 
 
 # ── Request model ─────────────────────────────────────────────
@@ -114,6 +116,19 @@ async def analyze(request: AnalysisRequest):
                 status_callback = status_callback,
             )
             _session_results[session_id] = result
+            
+            # Store XAI data
+            _xai_store[session_id] = {
+                "session_id": session_id,
+                "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+                "cot_trace": result.get("xai_cot_trace", []),
+                "attribution": result.get("xai_attribution", {})
+            }
+            
+            # Save XAI data to file for persistence/download
+            xai_file = Path("outputs/xai") / f"xai_{session_id}.json"
+            with open(xai_file, "w", encoding="utf-8") as f:
+                json.dump(_xai_store[session_id], f, indent=4)
             # Signal completion
             q = _event_queues.get(session_id)
             if q:
@@ -191,6 +206,38 @@ async def dashboard():
         return HTMLResponse(dashboard_path.read_text(encoding="utf-8"))
     return HTMLResponse("<h1>Dashboard not found — place dashboard.html next to main_a2a.py</h1>")
 
+
+@app.get("/xai", response_class=HTMLResponse)
+async def xai_dashboard():
+    """Serve the XAI Dashboard."""
+    dashboard_path = Path("outputs/xai/xai_dashboard.html")
+    if dashboard_path.exists():
+        return HTMLResponse(dashboard_path.read_text(encoding="utf-8"))
+    return HTMLResponse("<h1>XAI Dashboard not found — check outputs/xai/xai_dashboard.html</h1>")
+
+
+@app.get("/latest_xai")
+async def get_latest_xai():
+    """Get XAI data for the most recent session."""
+    if not _xai_store:
+        return JSONResponse({"error": "No XAI data available yet"}, status_code=404)
+    # Get last inserted item
+    latest_id = list(_xai_store.keys())[-1]
+    return _xai_store[latest_id]
+
+
+@app.get("/xai/{session_id}")
+async def get_xai_session(session_id: str):
+    """Get XAI data for a specific session."""
+    data = _xai_store.get(session_id)
+    if not data:
+        # Try to load from file
+        xai_file = Path("outputs/xai") / f"xai_{session_id}.json"
+        if xai_file.exists():
+            return JSONResponse(json.loads(xai_file.read_text(encoding="utf-8")))
+        return JSONResponse({"error": "Session not found"}, status_code=404)
+    return data
+
 @app.post("/analyze_files")
 async def analyze_files(
     water_rgb:         UploadFile = File(default=None),
@@ -249,6 +296,19 @@ async def analyze_files(
                 status_callback = _status_cb,
             )
             _session_results[session_id] = result
+            
+            # Store XAI data
+            _xai_store[session_id] = {
+                "session_id": session_id,
+                "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+                "cot_trace": result.get("xai_cot_trace", []),
+                "attribution": result.get("xai_attribution", {})
+            }
+            
+            # Save XAI data to file
+            xai_file = Path("outputs/xai") / f"xai_{session_id}.json"
+            with open(xai_file, "w", encoding="utf-8") as f:
+                json.dump(_xai_store[session_id], f, indent=4)
             _event_queues[session_id].put({
                 "type": "done",
                 "data": {"session_id": session_id},
