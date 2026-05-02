@@ -2202,7 +2202,7 @@
 
   <!-- TOAST -->
   <div class="toast" id="toast">
-    <span class="toast-icon" id="toast-icon">ℹ️</span>
+    <span class="toast-icon" id="toast-icon"></span>
     <span id="toast-msg">Message</span>
   </div>
 
@@ -2278,7 +2278,7 @@
     /* ===================== TOAST ===================== */
     function showToast(msg, type = 'info', duration = 3000) {
       const t = document.getElementById('toast');
-      document.getElementById('toast-icon').textContent = type === 'error' ? '⚠️' : type === 'success' ? '✅' : 'ℹ️';
+      document.getElementById('toast-icon').textContent = type === 'error' ? '⚠️' : type === 'success' ? '✅' : '';
       t.className = `toast ${type === 'error' ? 'error' : ''}`;
       document.getElementById('toast-msg').textContent = msg;
       t.classList.add('visible');
@@ -2569,8 +2569,8 @@
 
 
   </script>
-  <script src="/static/voice_module.js"></script>
-  <script src="/static/dashboard_patch.js"></script>
+  <script src="/static/voice_module.js?v=2"></script>
+  <script src="/static/dashboard_patch.js?v=2"></script>
 </body>
 
 </html>

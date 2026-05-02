@@ -312,7 +312,7 @@
         if (f && el) {
           el._selectedFile = f; el.value = f.name; el.classList.add('voice-filled');
           setTimeout(() => el.classList.remove('voice-filled'), 2000);
-          if (typeof showToast === 'function') showToast(`✅ Image : ${f.name}`, 'success', 3000);
+          if (typeof showToast === 'function') showToast(`Image : ${f.name}`, 'success', 3000);
         }
         try { document.body.removeChild(tmp); } catch(_) {}
       };

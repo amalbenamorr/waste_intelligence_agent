@@ -54,7 +54,7 @@
       input.classList.add('voice-filled');
       setTimeout(() => input.classList.remove('voice-filled'), 2000);
       if (typeof showToast === 'function')
-        showToast(`✅ ${cfg.label} : ${f.name}`, 'success', 3000);
+        showToast(`${cfg.label} : ${f.name}`, 'success', 3000);
       fi.value = '';
     });
 
@@ -304,7 +304,7 @@
   function _fallbackSuccessPopup(data) {
     _playSuccessSound();
     if (typeof showToast === 'function')
-      showToast(`✅ Analyse terminée en ${data.total_time_s || '?'}s`, 'success', 5000);
+      showToast(`Analyse terminée en ${data.total_time_s || '?'}s`, 'success', 5000);
   }
 
   function _playSuccessSound() {
